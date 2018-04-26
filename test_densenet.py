@@ -4,7 +4,7 @@ from torch.autograd import Variable
 from densenet import DenseNet
 from collections import OrderedDict
 
-# run it with python -m models.check_gradient
+# run it with python test_densenet.py
 use_cuda = True
 print('please remove dropout first')
 bn_size = None
@@ -12,6 +12,7 @@ multigpus = False
 is_eval = False
 model = DenseNet(input_size=32, bn_size=bn_size, efficient=False)
 model_effi = DenseNet(input_size=32, bn_size=bn_size, efficient=True)
+# for stronger test
 model.features.denseblock2.denselayer12._modules['norm1'].running_mean.fill_(1)
 model.features.denseblock2.denselayer12._modules['norm1'].running_var.fill_(2)
 state = model.state_dict()

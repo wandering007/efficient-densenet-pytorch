@@ -94,14 +94,14 @@ class _DenseBlock(nn.Module):
             self.shared_alloc[0].resize_(final_storage_size)
             self.shared_alloc[1].resize_(final_storage_size)
             outputs = [x]
-            for i, module in enumerate(self.children()):  # already in the right order
+            for module in self.children():  # already in the right order
                 new_features = module(outputs)
                 outputs.append(new_features)
             outputs = torch.cat(outputs, dim=1)
 
         else:
             outputs = x
-            for i, module in enumerate(self.children()):
+            for module in self.children():
                 new_features = module(outputs)
                 outputs = torch.cat([outputs, new_features], dim=1)
         return outputs
