@@ -39,9 +39,9 @@ class _DenseLayer(nn.Module):
         self.params = sum([param.numel() for param in self.parameters()])
         self.flops = self.params * input_size ** 2
 
-    def forward(self, x):
+    def forward(self, x, shared_alloc=None):
         if hasattr(self, 'bottleneck'):
-            x = self.bottleneck(x)
+            x = self.bottleneck(x, shared_alloc)
         else:
             x = self._modules['norm1'](x)
             x = self._modules['relu1'](x)
@@ -77,11 +77,12 @@ class _DenseBlock(nn.Module):
             layer = _DenseLayer(num_input_features=num_input_features + i * growth_rate,
                                 growth_rate=growth_rate, bn_size=bn_size,
                                 drop_rate=drop_rate,
-                                input_size=input_size)
+                                input_size=input_size,
+                                efficient=efficient)
             self.add_module('denselayer%d' % (i + 1), layer)
 
     def forward(self, x, shared_alloc=None):
-        if self.shared_alloc is not None:
+        if shared_alloc is not None:
             # Resize storage
             final_size = list(x.size())
             final_size[1] = self.final_num_features
@@ -91,7 +92,7 @@ class _DenseBlock(nn.Module):
                 shared_alloc[1].resize_(final_storage_size)
             outputs = [x]
             for module in self.children():  # already in the right order
-                new_features = module(outputs)
+                new_features = module(outputs, shared_alloc=shared_alloc)
                 outputs.append(new_features)
             outputs = torch.cat(outputs, dim=1)
 
@@ -132,7 +133,8 @@ class DenseNet(nn.Module):
             block = _DenseBlock(num_layers=num_layers,
                                 num_input_features=num_features,
                                 bn_size=bn_size, growth_rate=growth_rate,
-                                drop_rate=drop_rate, input_size=input_size)
+                                drop_rate=drop_rate, input_size=input_size,
+                                efficient=efficient)
             self.features.add_module('denseblock%d' % (i + 1), block)
             for m in block.children():
                 flops += m.flops
