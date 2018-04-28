@@ -1,18 +1,18 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from efficient_utils import _EfficientDensenetBottleneck, _SharedAllocation
+from efficient_utils import _EfficientDensenetBottleneck
 from functools import reduce
 from operator import mul
 
 
 class _DenseLayer(nn.Module):
-    def __init__(self, shared_alloc, num_input_features, growth_rate, bn_size, drop_rate, input_size):
+    def __init__(self, num_input_features, growth_rate, bn_size, drop_rate, input_size, efficient=False):
         super(_DenseLayer, self).__init__()
         if bn_size:
-            if shared_alloc is not None:
+            if efficient:
                 self.add_module('bottleneck', _EfficientDensenetBottleneck(
-                    shared_alloc=shared_alloc, num_input_channels=num_input_features,
+                    num_input_channels=num_input_features,
                     num_output_channels=bn_size * growth_rate,
                     kernel_size=1, bias=False))
             else:
@@ -25,9 +25,9 @@ class _DenseLayer(nn.Module):
             self.add_module('conv2', nn.Conv2d(bn_size * growth_rate, growth_rate,
                                                kernel_size=3, stride=1, padding=1, bias=False))
         else:
-            if shared_alloc is not None:
+            if efficient:
                 self.add_module('bottleneck', _EfficientDensenetBottleneck(
-                    shared_alloc=shared_alloc, num_input_channels=num_input_features,
+                    num_input_channels=num_input_features,
                     num_output_channels=growth_rate,
                     kernel_size=3, stride=1, padding=1, bias=False))
             else:
@@ -68,31 +68,27 @@ class _Transition(nn.Sequential):
 
 class _DenseBlock(nn.Module):
     def __init__(self, num_layers, num_input_features, bn_size, growth_rate, drop_rate,
-                 input_size, shared_alloc=None):
+                 input_size, efficient=False):
         super(_DenseBlock, self).__init__()
         self.growth_rate = growth_rate
-        self.shared_alloc = shared_alloc
-        if shared_alloc is not None:
+        if efficient:
             self.final_num_features = num_input_features + growth_rate * num_layers
         for i in range(num_layers):
-            layer = _DenseLayer(shared_alloc=self.shared_alloc,
-                                num_input_features=num_input_features + i * growth_rate,
+            layer = _DenseLayer(num_input_features=num_input_features + i * growth_rate,
                                 growth_rate=growth_rate, bn_size=bn_size,
                                 drop_rate=drop_rate,
                                 input_size=input_size)
             self.add_module('denselayer%d' % (i + 1), layer)
 
-    def forward(self, x):
+    def forward(self, x, shared_alloc=None):
         if self.shared_alloc is not None:
-            # Update storage type
-            self.shared_alloc[0].type_as(x)
-            self.shared_alloc[1].type_as(x)
             # Resize storage
             final_size = list(x.size())
             final_size[1] = self.final_num_features
             final_storage_size = reduce(mul, final_size, 1)
-            self.shared_alloc[0].resize_(final_storage_size)
-            self.shared_alloc[1].resize_(final_storage_size)
+            if shared_alloc[0].size() < final_storage_size:
+                shared_alloc[0].resize_(final_storage_size)
+                shared_alloc[1].resize_(final_storage_size)
             outputs = [x]
             for module in self.children():  # already in the right order
                 new_features = module(outputs)
@@ -114,6 +110,7 @@ class DenseNet(nn.Module):
         super(DenseNet, self).__init__()
         assert 0 < compression <= 1, 'compression of densenet should be between 0 and 1'
         growth_rate = num_init_features // 2
+        self.efficient = efficient
         self.features = nn.Sequential()
         # first conv
         if input_size > 32:
@@ -131,15 +128,11 @@ class DenseNet(nn.Module):
             flops = in_channels * num_init_features * 9 * input_size * input_size
         # Each denseblock
         num_features = num_init_features
-        shared_alloc = (_SharedAllocation(), _SharedAllocation()) if efficient else None
-        current_layer_pos = 0
         for i, num_layers in enumerate(block_config):
             block = _DenseBlock(num_layers=num_layers,
                                 num_input_features=num_features,
                                 bn_size=bn_size, growth_rate=growth_rate,
-                                drop_rate=drop_rate, input_size=input_size,
-                                shared_alloc=shared_alloc)
-            current_layer_pos += num_layers
+                                drop_rate=drop_rate, input_size=input_size)
             self.features.add_module('denseblock%d' % (i + 1), block)
             for m in block.children():
                 flops += m.flops
@@ -178,8 +171,19 @@ class DenseNet(nn.Module):
         self.num_params = sum([param.numel() for param in self.parameters()])
 
     def forward(self, x):
-        features = self.features(x)
-        out = F.relu(features)
+        if self.efficient:
+            shared_alloc = [torch.Storage(1024), torch.Storage(1024)]
+        # Update storage type
+            shared_alloc[0] = shared_alloc[0].type(x.storage().type())
+            shared_alloc[1] = shared_alloc[1].type(x.storage().type())
+        else:
+            shared_alloc = None
+        for module in self.features.children():
+            if isinstance(module, _DenseBlock):
+                x = module(x, shared_alloc)
+            else:
+                x = module(x)
+        out = F.relu(x)
         out = F.avg_pool2d(out, kernel_size=out.size(2)).view(out.size(0), -1)
         out = F.dropout(out, p=0.5, training=self.training)
         out = self.classifier(out)

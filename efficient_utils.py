@@ -18,13 +18,11 @@ class _EfficientDensenetBottleneck(nn.Module):
     concatenation and batch normalization features. Because the shared memory
     is not perminant, these features are recomputed during the backward pass.
     """
-
-    def __init__(self, shared_alloc, num_input_channels, num_output_channels,
+    def __init__(self, num_input_channels, num_output_channels,
                  kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=True, dims=2,
                  momentum=0.1, eps=1e-5):
         super(_EfficientDensenetBottleneck, self).__init__()
         assert dims in [1, 2, 3]
-        self.shared_alloc = shared_alloc
         self.num_input_channels = num_input_channels
         self.num_output_channels = num_output_channels
         self.dims = dims
@@ -58,7 +56,7 @@ class _EfficientDensenetBottleneck(nn.Module):
         stdv = 1. / math.sqrt(self.num_input_channels)
         self._parameters['conv_weight'].data.uniform_(-stdv, stdv)
 
-    def forward(self, inputs):
+    def forward(self, inputs, shared_alloc):
         if isinstance(inputs, torch.Tensor):
             inputs = [inputs]
 
@@ -66,7 +64,7 @@ class _EfficientDensenetBottleneck(nn.Module):
         # It does not create any new storage
         # Rather, it uses a shared memory allocation to store the intermediate feature maps
         # These intermediate feature maps have to be re-populated before the backward pass
-        fn = _EfficientDensenetBottleneckFn(self.shared_alloc,
+        fn = _EfficientDensenetBottleneckFn(shared_alloc,
                                             self._parameters['norm_weight'], self._parameters['norm_bias'],
                                             self._buffers['norm_running_mean'], self._buffers['norm_running_var'],
                                             training=self.training, momentum=self.momentum, eps=self.eps)
@@ -101,63 +99,6 @@ class _EfficientDensenetBottleneck(nn.Module):
         return s.format(name=self.__class__.__name__, **self.__dict__)
 
 
-# Here's where we define the internals of the efficient bottleneck layer
-class _SharedAllocation(object):
-    """
-    A helper class which maintains a shared memory allocation.
-    Used for concatenation and batch normalization.
-    """
-
-    def __init__(self, size=1024):
-        self._cpu_storage = torch.Storage(size)
-        self._gpu_storages = []
-        if torch.cuda.is_available():
-            for device_idx in range(torch.cuda.device_count()):
-                with torch.cuda.device(device_idx):
-                    self._gpu_storages.append(torch.Storage(size).cuda())
-
-    def type(self, t):
-        if not t.is_cuda:
-            self._cpu_storage = self._cpu_storage.type(t)
-        else:
-            for device_idx, storage in enumerate(self._gpu_storages):
-                with torch.cuda.device(device_idx):
-                    self._gpu_storages[device_idx] = storage.type(t)
-
-    def type_as(self, obj):
-        if isinstance(obj, torch.Tensor):
-            if not obj.is_cuda:
-                self._cpu_storage = self._cpu_storage.type(obj.storage().type())
-            else:
-                for device_idx, storage in enumerate(self._gpu_storages):
-                    with torch.cuda.device(device_idx):
-                        self._gpu_storages[device_idx] = storage.type(obj.storage().type())
-        else:
-            if not obj.is_cuda:
-                self._cpu_storage = self._cpu_storage.type(obj.storage().type())
-            else:
-                for device_idx, storage in enumerate(self._gpu_storages):
-                    with torch.cuda.device(device_idx):
-                        self._gpu_storages[device_idx] = storage.type(obj.type())
-
-    def resize_(self, size):
-        if self._cpu_storage.size() < size:
-            self._cpu_storage.resize_(size)
-        for device_idx, storage in enumerate(self._gpu_storages):
-            if storage.size() < size:
-                with torch.cuda.device(device_idx):
-                    self._gpu_storages[device_idx].resize_(size)
-        return self
-
-    def storage_for(self, val):
-        if val.is_cuda:
-            with torch.cuda.device_of(val):
-                curr_device_id = torch.cuda.current_device()
-                return self._gpu_storages[curr_device_id]
-        else:
-            return self._cpu_storage
-
-
 class _EfficientDensenetBottleneckFn(Function):
     """
     The autograd function which performs the efficient bottlenck operations:
@@ -173,12 +114,11 @@ class _EfficientDensenetBottleneckFn(Function):
     If the output is not used IMMEDIATELY after calling forward, it is not guarenteed
     to be the ReLU output
     """
-
     def __init__(self, shared_alloc,
                  bn_weight, bn_bias,
                  running_mean, running_var,
                  training=True, momentum=0.1, eps=1e-5):
-        assert isinstance(shared_alloc, tuple) and len(shared_alloc) == 2
+        assert len(shared_alloc) == 2
         self.shared_allocation = shared_alloc
         self.bn_weight = bn_weight
         self.bn_bias = bn_bias
@@ -205,10 +145,8 @@ class _EfficientDensenetBottleneckFn(Function):
         size = list(inputs[0].size())
         for num_channels in all_num_channels[1:]:
             size[1] += num_channels
-        storage1 = self.shared_allocation[0].storage_for(inputs[0])
-        storage2 = self.shared_allocation[1].storage_for(inputs[0])
-        bn_input = inputs[0].new(storage1).resize_(size)
-        relu_output = inputs[0].new(storage2).resize_(size)
+        bn_input = inputs[0].new(self.shared_allocation[0]).resize_(size)
+        relu_output = inputs[0].new(self.shared_allocation[1]).resize_(size)
         with torch.no_grad():
             torch.cat(inputs, dim=1, out=bn_input)
             bn_output = F.batch_norm(bn_input, self.running_mean, self.running_var,
@@ -218,7 +156,7 @@ class _EfficientDensenetBottleneckFn(Function):
             # Do ReLU - and have the output be in the intermediate storage
             torch.clamp(bn_output, min=0, out=relu_output)
 
-        self.save_for_backward(bn_input, relu_output, *inputs)
+        self.save_for_backward(*inputs)
         if self.training:
             # restore the BN statistics for later
             self.running_mean.copy_(self.prev_running_mean)
@@ -226,8 +164,13 @@ class _EfficientDensenetBottleneckFn(Function):
         return relu_output
 
     def prepare_backward(self):
-        bn_input, relu_output = self.saved_tensors[:2]
-        inputs = self.saved_tensors[2:]
+        inputs = self.saved_tensors
+        all_num_channels = [input.size(1) for input in inputs]
+        size = list(inputs[0].size())
+        for num_channels in all_num_channels[1:]:
+            size[1] += num_channels
+        bn_input = inputs[0].new(self.shared_allocation[0]).resize_(size)
+        relu_output = inputs[0].new(self.shared_allocation[1]).resize_(size)
         # Create variable, using existing storage
         torch.cat(inputs, dim=1, out=bn_input)
         self.bn_input = bn_input.requires_grad_()
@@ -239,6 +182,7 @@ class _EfficientDensenetBottleneckFn(Function):
 
         # Do ReLU
         torch.clamp(self.bn_output, min=0, out=relu_output)
+        self.relu_output = relu_output
 
     def backward(self, grad_output):
         """
@@ -246,8 +190,7 @@ class _EfficientDensenetBottleneckFn(Function):
         """
 
         grads = [None] * len(self.saved_tensors)
-        relu_output = self.saved_tensors[1]
-        inputs = self.saved_tensors[2:]
+        inputs = self.saved_tensors
 
         # If we don't need gradients, don't run backwards
         if not any(self.needs_input_grad):
@@ -255,7 +198,7 @@ class _EfficientDensenetBottleneckFn(Function):
 
         # BN weight/bias grad
         # With the shared allocations re-populated, compute ReLU/BN backward
-        relu_grad_input = grad_output.masked_fill_(relu_output <= 0, 0)
+        relu_grad_input = grad_output.masked_fill_(self.relu_output <= 0, 0)
         self.bn_output.backward(gradient=relu_grad_input)
 
         # Input grad (if needed)
@@ -271,6 +214,7 @@ class _EfficientDensenetBottleneckFn(Function):
         # Delete all intermediate variables
         del self.bn_input
         del self.bn_output
+        del self.relu_output
         del self.shared_allocation
         del self.prev_running_mean
         del self.prev_running_var
@@ -285,7 +229,6 @@ class _DummyBackwardHookFn(Function):
     pass on the bottleneck layer
     The function itself is just an identity function
     """
-
     def __init__(self, fn):
         """
         fn: function to call "prepare_backward" on
