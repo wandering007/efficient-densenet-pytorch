@@ -128,15 +128,7 @@ class _EfficientDensenetBottleneckFn(Function):
         self.momentum = momentum
         self.eps = eps
 
-        # Buffers to store old versions of bn statistics
-        self.prev_running_mean = self.running_mean.new(self.running_mean.size())
-        self.prev_running_var = self.running_var.new(self.running_var.size())
-
     def forward(self, *inputs):
-        if self.training:
-            # Save the current BN statistics for later
-            self.prev_running_mean.copy_(self.running_mean)
-            self.prev_running_var.copy_(self.running_var)
 
         # Create tensors that use shared allocations
         # One for the concatenation output (bn_input)
@@ -152,15 +144,10 @@ class _EfficientDensenetBottleneckFn(Function):
             bn_output = F.batch_norm(bn_input, self.running_mean, self.running_var,
                                      self.bn_weight, self.bn_bias, training=self.training,
                                      momentum=self.momentum, eps=self.eps)
-
             # Do ReLU - and have the output be in the intermediate storage
             torch.clamp(bn_output, min=0, out=relu_output)
 
         self.save_for_backward(*inputs)
-        if self.training:
-            # restore the BN statistics for later
-            self.running_mean.copy_(self.prev_running_mean)
-            self.running_var.copy_(self.prev_running_var)
         return relu_output
 
     def prepare_backward(self):
@@ -178,7 +165,7 @@ class _EfficientDensenetBottleneckFn(Function):
             # Do batch norm
             self.bn_output = F.batch_norm(self.bn_input, self.running_mean, self.running_var,
                                           self.bn_weight, self.bn_bias, training=self.training,
-                                          momentum=self.momentum, eps=self.eps)
+                                          momentum=0, eps=self.eps)
 
         # Do ReLU
         torch.clamp(self.bn_output, min=0, out=relu_output)
@@ -216,8 +203,6 @@ class _EfficientDensenetBottleneckFn(Function):
         del self.bn_output
         del self.relu_output
         del self.shared_allocation
-        del self.prev_running_mean
-        del self.prev_running_var
 
         return tuple(grads)
 

@@ -7,7 +7,7 @@ from operator import mul
 
 
 class _DenseLayer(nn.Module):
-    def __init__(self, num_input_features, growth_rate, bn_size, drop_rate, input_size, efficient=False):
+    def __init__(self, num_input_features, growth_rate, bn_size, drop_rate, efficient=False):
         super(_DenseLayer, self).__init__()
         if bn_size:
             if efficient:
@@ -36,8 +36,6 @@ class _DenseLayer(nn.Module):
                 self.add_module('conv1', nn.Conv2d(num_input_features, growth_rate,
                                                    kernel_size=3, stride=1, padding=1, bias=False))
         self.drop_rate = drop_rate
-        self.params = sum([param.numel() for param in self.parameters()])
-        self.flops = self.params * input_size ** 2
 
     def forward(self, x, shared_alloc=None):
         if hasattr(self, 'bottleneck'):
@@ -67,8 +65,7 @@ class _Transition(nn.Sequential):
 
 
 class _DenseBlock(nn.Module):
-    def __init__(self, num_layers, num_input_features, bn_size, growth_rate, drop_rate,
-                 input_size, efficient=False):
+    def __init__(self, num_layers, num_input_features, bn_size, growth_rate, drop_rate, efficient=False):
         super(_DenseBlock, self).__init__()
         self.growth_rate = growth_rate
         if efficient:
@@ -77,7 +74,6 @@ class _DenseBlock(nn.Module):
             layer = _DenseLayer(num_input_features=num_input_features + i * growth_rate,
                                 growth_rate=growth_rate, bn_size=bn_size,
                                 drop_rate=drop_rate,
-                                input_size=input_size,
                                 efficient=efficient)
             self.add_module('denselayer%d' % (i + 1), layer)
 
@@ -133,11 +129,9 @@ class DenseNet(nn.Module):
             block = _DenseBlock(num_layers=num_layers,
                                 num_input_features=num_features,
                                 bn_size=bn_size, growth_rate=growth_rate,
-                                drop_rate=drop_rate, input_size=input_size,
+                                drop_rate=drop_rate,
                                 efficient=efficient)
             self.features.add_module('denseblock%d' % (i + 1), block)
-            for m in block.children():
-                flops += m.flops
 
             num_features += num_layers * growth_rate
             if i == len(block_config) - 1:
@@ -168,14 +162,12 @@ class DenseNet(nn.Module):
                 nn.init.constant_(m._parameters['norm_weight'], 1)
                 nn.init.constant_(m._parameters['norm_bias'], 0)
                 nn.init.kaiming_normal_(m._parameters['conv_weight'])
-
-        self.flops = flops
-        self.num_params = sum([param.numel() for param in self.parameters()])
+        self.params = sum([param.numel() for param in self.parameters()])
 
     def forward(self, x):
         if self.efficient:
-            shared_alloc = [torch.Storage(1024), torch.Storage(1024)]
-        # Update storage type
+            shared_alloc = [torch.Storage(), torch.Storage()]
+            # Update storage type
             shared_alloc[0] = shared_alloc[0].type(x.storage().type())
             shared_alloc[1] = shared_alloc[1].type(x.storage().type())
         else:
