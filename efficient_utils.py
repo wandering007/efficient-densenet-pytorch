@@ -201,6 +201,8 @@ class _EfficientDensenetBottleneckFn(Function):
         # Delete all intermediate variables
         del self.bn_input
         del self.bn_output
+        del self.bn_weight
+        del self.bn_bias
         del self.relu_output
         del self.shared_allocation
 
