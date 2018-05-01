@@ -65,10 +65,9 @@ class _EfficientDensenetBottleneck(nn.Module):
         # Rather, it uses a shared memory allocation to store the intermediate feature maps
         # These intermediate feature maps have to be re-populated before the backward pass
         fn = _EfficientDensenetBottleneckFn(shared_alloc,
-                                            self._parameters['norm_weight'], self._parameters['norm_bias'],
                                             self._buffers['norm_running_mean'], self._buffers['norm_running_var'],
                                             training=self.training, momentum=self.momentum, eps=self.eps)
-        relu_output = fn(*inputs)
+        relu_output = fn(self._parameters['norm_weight'], self._parameters['norm_bias'], *inputs)
 
         # The convolutional output - using relu_output which is stored in shared memory allocation
         conv_output = self.conv(relu_output, self._parameters['conv_weight'], bias=self._parameters['conv_bias'],
@@ -115,20 +114,17 @@ class _EfficientDensenetBottleneckFn(Function):
     to be the ReLU output
     """
     def __init__(self, shared_alloc,
-                 bn_weight, bn_bias,
                  running_mean, running_var,
                  training=True, momentum=0.1, eps=1e-5):
         assert len(shared_alloc) == 2
         self.shared_allocation = shared_alloc
-        self.bn_weight = bn_weight
-        self.bn_bias = bn_bias
         self.running_mean = running_mean
         self.running_var = running_var
         self.training = training
         self.momentum = momentum
         self.eps = eps
 
-    def forward(self, *inputs):
+    def forward(self, bn_weight, bn_bias, *inputs):
 
         # Create tensors that use shared allocations
         # One for the concatenation output (bn_input)
@@ -142,12 +138,13 @@ class _EfficientDensenetBottleneckFn(Function):
         with torch.no_grad():
             torch.cat(inputs, dim=1, out=bn_input)
             bn_output = F.batch_norm(bn_input, self.running_mean, self.running_var,
-                                     self.bn_weight, self.bn_bias, training=self.training,
+                                     bn_weight, bn_bias, training=self.training,
                                      momentum=self.momentum, eps=self.eps)
             # Do ReLU - and have the output be in the intermediate storage
             torch.clamp(bn_output, min=0, out=relu_output)
-
         self.save_for_backward(*inputs)
+        self.bn_weight = bn_weight.detach().requires_grad_()
+        self.bn_bias = bn_bias.detach().requires_grad_()
         return relu_output
 
     def prepare_backward(self):
@@ -176,7 +173,7 @@ class _EfficientDensenetBottleneckFn(Function):
         Precondition: must call prepare_backward before calling backward
         """
 
-        grads = [None] * len(self.saved_tensors)
+        grads = [None] * (len(self.saved_tensors) + 2)
         inputs = self.saved_tensors
 
         # If we don't need gradients, don't run backwards
@@ -187,15 +184,18 @@ class _EfficientDensenetBottleneckFn(Function):
         # With the shared allocations re-populated, compute ReLU/BN backward
         relu_grad_input = grad_output.masked_fill_(self.relu_output <= 0, 0)
         self.bn_output.backward(gradient=relu_grad_input)
-
+        if self.needs_input_grad[0]:
+            grads[0] = self.bn_weight.grad.data
+        if self.needs_input_grad[1]:
+            grads[1] = self.bn_bias.grad.data
         # Input grad (if needed)
         # Run backwards through the concatenation operation
-        if any(self.needs_input_grad):
+        if any(self.needs_input_grad[2:]):
             all_num_channels = [input.size(1) for input in inputs]
             index = 0
             for i, num_channels in enumerate(all_num_channels):
                 new_index = num_channels + index
-                grads[i] = self.bn_input.grad.data[:, index:new_index]
+                grads[2 + i] = self.bn_input.grad.data[:, index:new_index]
                 index = new_index
 
         # Delete all intermediate variables
@@ -221,13 +221,7 @@ class _DummyBackwardHookFn(Function):
         self.fn = fn
 
     def forward(self, input):
-        """
-        Though this function is just an identity function, we have to return a new
-        tensor object in order to trigger the autograd.
-        """
-        size = input.size()
-        res = input.new(input.storage()).view(*size)
-        return res
+        return input
 
     def backward(self, grad_output):
         self.fn.prepare_backward()
