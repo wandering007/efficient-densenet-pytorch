@@ -17,7 +17,7 @@ F means average forward time (ms), B means average backward time (ms), R=B/F.
 |   Efficient   | F=15849, B=36738, R=2.3 | F=36.3, B=103.8, R=2.86 | F=43.2, B=66.9, R=1.55 | F=69.6, B=81.7, R=1.17 |
 | Non-efficient | F=24889, B=36732, R=1.5 | F=36.1, B=74.9, R=2.07  | F=37.9, B=40.7, R=1.07 | F=62.0, B=33.1, R=0.53 |
 
-The efficient version can process up to 1450 batches in a single GPU (~12GB), compared with 350 batches of the non-efficient version. That is, the efficient version is **~4x memory-efficient** than the non-efficient version.
+The efficient version can process up to 1450 batches in a single GPU (~12GB), compared with 350 batches of the non-efficient version. That is, the efficient version is **~4x memory-efficient** as the non-efficient version.
 
 # References
 
