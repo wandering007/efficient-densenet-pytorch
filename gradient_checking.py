@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from torch.autograd import Variable
+import torch.backends.cudnn as cudnn
 from densenet import DenseNet
 from collections import OrderedDict
 
@@ -22,6 +22,7 @@ model_effi.load_state_dict(state)
 if use_cuda:
     model.cuda()
     model_effi.cuda()
+    cudnn.deterministic = True
     if multigpus:
         model = nn.DataParallel(model, device_ids=[0, 1])
         model_effi = nn.DataParallel(model_effi, device_ids=[0, 1])
@@ -29,7 +30,7 @@ if is_eval:
     model.eval()
     model_effi.eval()
 # create the model inputs
-input_var = Variable(torch.randn(8, 3, 32, 32), requires_grad=False)
+input_var = torch.randn(8, 3, 32, 32)
 if use_cuda:
     input_var = input_var.cuda()
 
