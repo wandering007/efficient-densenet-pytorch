@@ -112,16 +112,12 @@ class DenseNet(nn.Module):
         if input_size > 32:
             self.features.add_module('conv0', nn.Conv2d(in_channels, num_init_features,
                                                         kernel_size=7, stride=2, padding=3, bias=False))
-            input_size //= 2
-            flops = in_channels * num_init_features * 49 * input_size * input_size
             self.features.add_module('norm0', nn.BatchNorm2d(num_init_features))
             self.features.add_module('relu0', nn.ReLU())
             self.features.add_module('pool0', nn.MaxPool2d(kernel_size=3, stride=2, padding=1))
-            input_size //= 2
         else:
             self.features.add_module('conv0', nn.Conv2d(in_channels, num_init_features,
                                                         kernel_size=3, stride=1, padding=1, bias=False))
-            flops = in_channels * num_init_features * 9 * input_size * input_size
         # Each denseblock
         num_features = num_init_features
         for i, num_layers in enumerate(block_config):
@@ -139,9 +135,7 @@ class DenseNet(nn.Module):
             trans = _Transition(num_input_features=num_features,
                                 num_output_features=out_features)
             self.features.add_module('transition%d' % (i + 1), trans)
-            flops += input_size * input_size * num_features * out_features
             num_features = out_features
-            input_size //= 2
         # Final batch norm
         self.features.add_module('norm%d' % (len(block_config) + 1), nn.BatchNorm2d(num_features))
 
@@ -151,7 +145,7 @@ class DenseNet(nn.Module):
         # Official init from torch repo.
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight)
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
             elif isinstance(m, nn.BatchNorm2d):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
@@ -161,7 +155,6 @@ class DenseNet(nn.Module):
                 nn.init.constant_(m._parameters['norm_weight'], 1)
                 nn.init.constant_(m._parameters['norm_bias'], 0)
                 nn.init.kaiming_normal_(m._parameters['conv_weight'], mode='fan_out', nonlinearity='relu')
-        self.params = sum([param.numel() for param in self.parameters()])
 
     def forward(self, x):
         shared_alloc = torch.Storage().type(x.storage().type()) if self.efficient else None
