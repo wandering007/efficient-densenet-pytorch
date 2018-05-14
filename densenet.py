@@ -83,9 +83,8 @@ class _DenseBlock(nn.Module):
             final_size = list(x.size())
             final_size[1] = self.final_num_features
             final_storage_size = reduce(mul, final_size, 1)
-            if shared_alloc[0].size() < final_storage_size:
-                shared_alloc[0].resize_(final_storage_size)
-                shared_alloc[1].resize_(final_storage_size)
+            if shared_alloc.size() < final_storage_size:
+                shared_alloc.resize_(final_storage_size)
             outputs = [x]
             for module in self.children():  # already in the right order
                 new_features = module(outputs, shared_alloc=shared_alloc)
@@ -161,17 +160,11 @@ class DenseNet(nn.Module):
             elif isinstance(m, _EfficientDensenetBottleneck):
                 nn.init.constant_(m._parameters['norm_weight'], 1)
                 nn.init.constant_(m._parameters['norm_bias'], 0)
-                nn.init.kaiming_normal_(m._parameters['conv_weight'])
+                nn.init.kaiming_normal_(m._parameters['conv_weight'], mode='fan_out', nonlinearity='relu')
         self.params = sum([param.numel() for param in self.parameters()])
 
     def forward(self, x):
-        if self.efficient:
-            shared_alloc = [torch.Storage(), torch.Storage()]
-            # Update storage type
-            shared_alloc[0] = shared_alloc[0].type(x.storage().type())
-            shared_alloc[1] = shared_alloc[1].type(x.storage().type())
-        else:
-            shared_alloc = None
+        shared_alloc = torch.Storage().type(x.storage().type()) if self.efficient else None
         for module in self.features.children():
             if isinstance(module, _DenseBlock):
                 x = module(x, shared_alloc)

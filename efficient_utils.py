@@ -1,6 +1,7 @@
 # This implementation is a new efficient implementation of Densenet-BC,
 # as described in "Memory-Efficient Implementation of DenseNets"
 # The code is based on https://github.com/gpleiss/efficient_densenet_pytorch
+
 import math
 import torch
 import torch.nn as nn
@@ -116,8 +117,7 @@ class _EfficientDensenetBottleneckFn(Function):
     def __init__(self, shared_alloc,
                  running_mean, running_var,
                  training=True, momentum=0.1, eps=1e-5):
-        assert len(shared_alloc) == 2
-        self.shared_allocation = shared_alloc
+        self.shared_alloc = shared_alloc
         self.running_mean = running_mean
         self.running_var = running_var
         self.training = training
@@ -133,10 +133,9 @@ class _EfficientDensenetBottleneckFn(Function):
         size = list(inputs[0].size())
         for num_channels in all_num_channels[1:]:
             size[1] += num_channels
-        bn_input = inputs[0].new(self.shared_allocation[0]).resize_(size)
-        relu_output = inputs[0].new(self.shared_allocation[1]).resize_(size)
         with torch.no_grad():
-            torch.cat(inputs, dim=1, out=bn_input)
+            bn_input = torch.cat(inputs, dim=1) if len(inputs) > 1 else inputs[0]
+            relu_output = inputs[0].new(self.shared_alloc).resize_(size)
             bn_output = F.batch_norm(bn_input, self.running_mean, self.running_var,
                                      bn_weight, bn_bias, training=self.training,
                                      momentum=self.momentum, eps=self.eps)
@@ -153,10 +152,7 @@ class _EfficientDensenetBottleneckFn(Function):
         size = list(inputs[0].size())
         for num_channels in all_num_channels[1:]:
             size[1] += num_channels
-        bn_input = inputs[0].new(self.shared_allocation[0]).resize_(size)
-        relu_output = inputs[0].new(self.shared_allocation[1]).resize_(size)
-        # Create variable, using existing storage
-        torch.cat(inputs, dim=1, out=bn_input)
+        bn_input = torch.cat(inputs, dim=1) if len(inputs) > 1 else inputs[0].detach()
         self.bn_input = bn_input.requires_grad_()
         with torch.enable_grad():
             # Do batch norm
@@ -165,6 +161,7 @@ class _EfficientDensenetBottleneckFn(Function):
                                           momentum=0, eps=self.eps)
 
         # Do ReLU
+        relu_output = inputs[0].new(self.shared_alloc).resize_(size)
         torch.clamp(self.bn_output, min=0, out=relu_output)
         self.relu_output = relu_output
 
@@ -197,14 +194,6 @@ class _EfficientDensenetBottleneckFn(Function):
                 new_index = num_channels + index
                 grads[2 + i] = self.bn_input.grad.data[:, index:new_index]
                 index = new_index
-
-        # Delete all intermediate variables
-        del self.bn_input
-        del self.bn_output
-        del self.bn_weight
-        del self.bn_bias
-        del self.relu_output
-        del self.shared_allocation
 
         return tuple(grads)
 
