@@ -3,7 +3,7 @@ Memory-Efficient Implementation of DenseNets, **support both DenseNet and DeseNe
 
 Environments: Linux CPU/GPU, Python 3, PyTorch 0.4 or higher
 
-Check the implementation correctness by `python test_densenet.py` with different settings in `test_densenet.py` (CPU, single GPU, multiple GPUs), some `assert` errors may be caused by occasional random states, you can relax the error tolerance (default: `1e-5`) or try it several times.
+Check the implementation correctness by `python gradient_checking.py` with different settings in `test_densenet.py` (CPU, single GPU, multiple GPUs), some `assert` errors may be caused by occasional random states, you can relax the error tolerance (default: `1e-5`) or try it several times.
 
 Benchmark the forward/backward of efficient&non-efficient DenseNet by `python benckmark_effi.py` (CPU, single GPU, multiple GPUs). The following table is reported on the Linux system equipped with 40 Intel(R) Xeon(R) CPUs (E5-2630 v4 @ 2.20GHz) and NVIDIA GTX TiTan 1080Ti. 
 
