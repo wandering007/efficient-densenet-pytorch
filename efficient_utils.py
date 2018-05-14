@@ -194,7 +194,13 @@ class _EfficientDensenetBottleneckFn(Function):
                 new_index = num_channels + index
                 grads[2 + i] = self.bn_input.grad.data[:, index:new_index]
                 index = new_index
-
+        # remove intermediate variables
+        del self.relu_output
+        del self.bn_output
+        del self.bn_input
+        del self.bn_weight
+        del self.bn_bias
+        del self.shared_alloc
         return tuple(grads)
 
 
