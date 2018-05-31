@@ -5,8 +5,8 @@ from densenet import DenseNet
 from collections import OrderedDict
 
 # run it with python test_densenet.py
-use_cuda = True
 print('please remove dropout first')
+use_cuda = True
 bn_size = None
 multigpus = False
 is_eval = False
@@ -16,8 +16,9 @@ model_effi = DenseNet(input_size=32, bn_size=bn_size, efficient=True)
 model.features.denseblock2.denselayer12._modules['norm1'].running_mean.fill_(1)
 model.features.denseblock2.denselayer12._modules['norm1'].running_var.fill_(2)
 state = model.state_dict()
-state = OrderedDict((k.replace('.norm1.', '.bottleneck.norm_') if '.norm1.' in k else k, v) for k, v in state.items())
-state = OrderedDict((k.replace('.conv1.', '.bottleneck.conv_') if '.conv1.' in k else k, v) for k, v in state.items())
+state = OrderedDict((k.replace('.norm1.', '.bottleneck.norm_'), v) for k, v in state.items())
+state = OrderedDict((k.replace('.conv1.', '.bottleneck.conv_'), v) for k, v in state.items())
+
 model_effi.load_state_dict(state)
 if use_cuda:
     model.cuda()
