@@ -8,8 +8,8 @@ import torchnet as tnt
 from torchnet.engine import Engine
 from torchnet.logger import VisdomPlotLogger, VisdomLogger
 from tqdm import tqdm
-from densenet import DenseNet
-from imagenet import ImageNet
+from models import DenseNet
+from datasets import ImageNet
 import os
 import copy
 import math

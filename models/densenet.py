@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from efficient_utils import _EfficientDensenetBottleneck
+from .efficient_utils import _EfficientDensenetBottleneck
 from functools import reduce
 from operator import mul
 

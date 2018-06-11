@@ -1,9 +1,8 @@
 import numpy as np
-import sys
 import time
 import torch
 import torch.backends.cudnn as cudnn
-from densenet import DenseNet
+from models import DenseNet
 import torch.nn as nn
 
 

@@ -1,10 +1,10 @@
 import torch
 import torch.nn as nn
 import torch.backends.cudnn as cudnn
-from densenet import DenseNet
+from models import DenseNet
 from collections import OrderedDict
 
-# run it with python test_densenet.py
+# run it with python -m utils.test_densenet.py
 print('please remove dropout first')
 use_cuda = True
 bn_size = None

@@ -4,9 +4,9 @@ Memory-Efficient Implementation of DenseNets, **support both DenseNet and DeseNe
 
 Environments: Linux CPU/GPU, Python 3, PyTorch 0.4 or higher
 
-Check the implementation correctness by `python gradient_checking.py` with different settings in `gradient_checking.py` (CPU, single GPU, multiple GPUs), some `assert` errors may be caused by occasional random states, you can relax the error tolerance (default: `1e-5`) or try it several times.
+Check the implementation correctness by `python -m utils.gradient_checking.py` with different settings in `gradient_checking.py` (CPU, single GPU, multiple GPUs), some `assert` errors may be caused by occasional random states, you can relax the error tolerance (default: `1e-5`) or try it several times.
 
-Benchmark the forward/backward of efficient&non-efficient DenseNet by `python benckmark_effi.py` (CPU, single GPU, multiple GPUs). The following results are reported on the Linux system equipped with 40 Intel(R) Xeon(R) CPUs (E5-2630 v4 @ 2.20GHz) and NVIDIA GTX TiTan 1080Ti. 
+Benchmark the forward/backward of efficient&non-efficient DenseNet by `python -m utils.benckmark_effi.py` (CPU, single GPU, multiple GPUs). The following results are reported on the Linux system equipped with 40 Intel(R) Xeon(R) CPUs (E5-2630 v4 @ 2.20GHz) and NVIDIA GTX TiTan 1080Ti.
 
 Model setting:   
 ```python
@@ -37,6 +37,7 @@ wget https://download.pytorch.org/models/densenet121-a639ec97.pth
 Then run
 
 ````shell
+cd utils
 python convert.py --to efficient --checkpoint densenet121-a639ec97.pth  --output densenet121_effi.pth
 ````
 
@@ -52,6 +53,13 @@ model = DenseNet(num_init_features=64, block_config=(6, 12, 24, 16), compression
 state_dict = torch.load('densenet121_effi.pth')
 model.load_state_dict(state_dict, strict=True)
 ```
+
+## Train efficient DenseNet on ImageNet
+
+Easy configuration and run:
+
+1. Config the experiment settings in `config.yaml`.
+2. run the command like `./run.sh 0,1,2,3 config.yaml `.
 
 # References
 
