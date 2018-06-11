@@ -10,13 +10,14 @@ parser.add_argument('--output', type=str, default='densenet.pth', metavar='OUTPU
 
 args = parser.parse_args()
 state = torch.load(args.checkpoint)
+# for pytorch 0.3 and lower
 state = OrderedDict((k.replace('.norm.1.', '.norm1.'), v) for k, v in state.items())
 state = OrderedDict((k.replace('.conv.1.', '.conv1.'), v) for k, v in state.items())
 state = OrderedDict((k.replace('.norm.2.', '.norm2.'), v) for k, v in state.items())
 state = OrderedDict((k.replace('.conv.2.', '.conv2.'), v) for k, v in state.items())
 if args.to == 'efficient':
-    state = OrderedDict((k.replace('.norm1.', '.bottleneck.norm_'), v) for k, v in state.items())
-    state = OrderedDict((k.replace('.conv1.', '.bottleneck.conv_'), v) for k, v in state.items())
+    state = OrderedDict((k.replace('.norm1.', '.bottleneck.norm_') if '.denselayer' in k else k, v) for k, v in state.items())
+    state = OrderedDict((k.replace('.conv1.', '.bottleneck.conv_') if '.denselayer' in k else k, v) for k, v in state.items())
 else:
     state = OrderedDict((k.replace('.bottleneck.norm_', '.norm1.'), v) for k, v in state.items())
     state = OrderedDict((k.replace('.bottleneck.conv_', '.conv1.'), v) for k, v in state.items())
