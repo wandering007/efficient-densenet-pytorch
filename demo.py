@@ -235,7 +235,7 @@ def on_end_epoch(state):
     print('[Epoch {:03d}] Training loss: {:.4f}\tTop 1: {:.2f}\tTop 5: {:.2f}'.format(
         state['epoch'] - 1, meter_loss.value()[0], classerr.value(k=1), classerr.value(k=5)))
 
-    if not args.no_visdom:
+    if args.visdom:
         train_loss_logger.log(state['epoch'] - 1, meter_loss.value()[0])
         train_err_logger.log(state['epoch'] - 1, classerr.value(k=1))
 
