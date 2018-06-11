@@ -1,0 +1,5 @@
+torch>=0.4
+git+https://github.com/pytorch/vision.git@master
+ConfigArgParse
+git+https://github.com/pytorch/tnt.git@master
+tqdm

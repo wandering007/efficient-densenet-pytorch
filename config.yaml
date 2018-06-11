@@ -1,0 +1,17 @@
+batch-size: 256
+num-batch-splits: 1
+dataset: UCF101
+data: ILSVRC2012
+test-batch-size: 1024
+epochs: 90
+lr: 0.1
+lr-type: multistep
+momentum: 0.9
+weight-decay: 1e-4
+gpus: [0,1,2,3]
+resume: ''
+start-epoch: 0
+test-only: false
+visdom: false
+log-name: ''
+save-interval: 1
