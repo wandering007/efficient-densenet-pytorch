@@ -88,7 +88,7 @@ test_loader = torch.utils.data.DataLoader(
 
 num_classes = 1000
 model = DenseNet(num_init_features=args.num_init_features, block_config=args.block_config, compression=args.compression,
-                 input_size=224, bn_size=args.block_config, num_classes=num_classes, efficient=True)
+                 input_size=224, bn_size=args.bn_size, num_classes=num_classes, efficient=True)
 print(model)
 
 if not os.path.isdir(args.checkpoints):
