@@ -208,7 +208,9 @@ def on_sample(state):
         # change lr
         for group in state['optimizer'].param_groups:
             group['lr'] = lr
-
+        if state['t'] == state['epoch'] * len(state['iterator']):
+            for i, p in enumerate(state['optimizer'].param_groups):
+                print(str(i)+':', p['lr'])
 
 def reset_meters():
     classerr.reset()
