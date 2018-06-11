@@ -27,6 +27,14 @@ parser.add('--data', type=str, default='datasets', metavar='data_root_path',
            help="data root: /path/to/dataset (default: 'datasets')")
 parser.add('--test-batch-size', type=int, default=1024, metavar='N',
            help='input batch size for testing (default: 1024)')
+parser.add('--bn-size', default=None, type=int,
+           metavar='bn_size', help='bottleneck size')
+parser.add('--num-init-features', type=int, default=None,
+           metavar='num_init_features', help='num_init_features')
+parser.add('--compression', type=float, default=1.,
+           metavar='compression', help='compression at transition')
+parser.add('--block-config', type=int, default=None, nargs='+', metavar='model_config',
+           help='model block config')
 parser.add('--epochs', type=int, default=90, metavar='N',
            help='number of epochs to train (default: 90)')
 parser.add('--lr', type=float, default=0.1, metavar='LR',
@@ -79,7 +87,8 @@ test_loader = torch.utils.data.DataLoader(
     batch_size=args.test_batch_size, shuffle=False, **kwargs)
 
 num_classes = 1000
-model = DenseNet(input_size=224, num_classes=num_classes, efficient=True)
+model = DenseNet(num_init_features=args.num_init_features, block_config=args.block_config, compression=args.compression,
+                 input_size=224, bn_size=args.block_config, num_classes=num_classes, efficient=True)
 print(model)
 
 if not os.path.isdir(args.checkpoints):

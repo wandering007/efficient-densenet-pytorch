@@ -59,9 +59,11 @@ model.load_state_dict(state_dict, strict=True)
 Easy configuration and run:
 
 0. Install the requirements via `pip install -r requirements.txt`
+1. Prepare ImageNet dataset following the [installation instructions](https://github.com/facebook/fb.resnet.torch/blob/master/INSTALL.md#download-the-imagenet-dataset), and the shell scripts in the `datasets/imagenet_pre` should be helpful.
+2. Configure the experiment settings in `config.yaml`.
+3. run the command like `./run.sh 0,1,2,3 config.yaml `.
 
-1. Configure the experiment settings in `config.yaml`.
-2. run the command like `./run.sh 0,1,2,3 config.yaml `.
+You will find that 4 GPUs are totally enough for training the efficient model with batch size of 256! 
 
 # References
 
