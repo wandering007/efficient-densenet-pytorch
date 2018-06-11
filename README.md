@@ -58,7 +58,7 @@ model.load_state_dict(state_dict, strict=True)
 
 Easy configuration and run:
 
-1. Config the experiment settings in `config.yaml`.
+1. Configure the experiment settings in `config.yaml`.
 2. run the command like `./run.sh 0,1,2,3 config.yaml `.
 
 # References
