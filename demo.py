@@ -132,20 +132,18 @@ if args.visdom:
     test_loss_logger = VisdomPlotLogger('line', opts={'title': '[{}] Test Loss'.format(args.log_name)})
     test_err_logger = VisdomPlotLogger('line', opts={'title': '[{}] Test Class Error'.format(args.log_name)})
     confusion_logger = VisdomLogger('heatmap', opts={'title': '[{}] Confusion matrix'.format(args.log_name),
-                                                     'columnnames': list(range(num_classes[args.dataset])),
-                                                     'rownames': list(range(num_classes[args.dataset]))})
+                                                     'columnnames': list(range(num_classes)),
+                                                     'rownames': list(range(num_classes))})
 
 criterion = nn.CrossEntropyLoss()
 
 
 def network(sample):
     if sample[2]:  # train mode
-        inputs = sample[0]
         model.train()
     else:
-        inputs = sample[0].view(-1, *list(sample[0].size()[2:])) if args.test_clips > 1 else sample[0]
         model.eval()
-    targets = sample[1]
+    inputs, targets = sample[0], sample[1]
     if len(args.gpus) > 0:
         inputs, targets = inputs.cuda(), targets.cuda()
     with torch.set_grad_enabled(sample[2]):
@@ -243,7 +241,7 @@ def on_end_epoch(state):
         saved_model = model.module if len(args.gpus) > 1 else model
         copied_model = copy.deepcopy(saved_model).cpu()
         torch.save(obj={'epoch': state['epoch'] - 1, 'state_dict': copied_model.state_dict()},
-                   f=os.path.join(args.checkpoints, args.dataset + '_{:03d}.tar'.format(state['epoch'] - 1)))
+                   f=os.path.join(args.checkpoints, 'ImageNet_{:03d}.tar'.format(state['epoch'] - 1)))
 
     # do validation at the end of each epoch
     reset_meters()
