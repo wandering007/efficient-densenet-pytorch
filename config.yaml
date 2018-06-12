@@ -1,5 +1,6 @@
 batch-size: 256
 num-batch-splits: 1
+dataset: ImageNet
 data: ILSVRC2012
 num-init-features: 64
 block-config: [6, 12, 24, 16]

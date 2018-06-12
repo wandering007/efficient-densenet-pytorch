@@ -9,13 +9,12 @@ from torchnet.engine import Engine
 from torchnet.logger import VisdomPlotLogger, VisdomLogger
 from tqdm import tqdm
 from models import DenseNet
-from datasets import ImageNet
+from datasets import ImageNet, CIFAR10, CIFAR100
 import os
 import copy
 import math
 import random
 import numpy as np
-
 
 parser = configargparse.ArgParser(default_config_files=[])
 parser.add('--config', required=True, is_config_file=True, help='config file path')
@@ -23,6 +22,8 @@ parser.add('--batch-size', type=int, default=256, metavar='N',
            help='input batch size for training (default: 256)')
 parser.add('--num-batch-splits', type=int, default=1, metavar='split',
            help='split batch size for training (default: 1)')
+parser.add('--dataset', type=str, required=True, metavar='dataset',
+           help="dataset name: ImageNet | CIFAR10 | CIFAR100 (default: '')")
 parser.add('--data', type=str, default='datasets', metavar='data_root_path',
            help="data root: /path/to/dataset (default: 'datasets')")
 parser.add('--test-batch-size', type=int, default=1024, metavar='N',
@@ -79,16 +80,38 @@ np.random.seed(args.seed + 3)
 
 kwargs = {'num_workers': 20, 'pin_memory': True} if len(args.gpus) > 0 else {}
 
+train_transform = test_transform = None
+if 'CIFAR' in args.dataset:
+    from torchvision import transforms
+
+    if args.dataset == 'CIFAR10':
+        mean = [125.3 / 255, 123.0 / 255, 113.9 / 255]
+        std = [63.0 / 255, 62.1 / 255, 66.7 / 255]
+    else:
+        mean = [129.3 / 255, 124.1 / 255, 112.4 / 255]
+        std = [68.2 / 255, 65.4 / 255, 70.4 / 255]
+    train_transform = transforms.Compose([
+        transforms.RandomHorizontalFlip(),
+        transforms.Pad(padding=4),
+        transforms.RandomCrop(32),
+        transforms.ToTensor(),
+        transforms.Normalize(mean, std)
+    ])
+    test_transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(mean, std)
+    ])
+
 train_loader = torch.utils.data.DataLoader(
-    ImageNet(root=args.data, train=True),
+    globals()[args.dataset](root=args.data, transform=train_transform, train=True),
     batch_size=args.batch_size, shuffle=True, drop_last=True, worker_init_fn=None, **kwargs)
 test_loader = torch.utils.data.DataLoader(
-    ImageNet(root=args.data, train=False),
+    globals()[args.dataset](root=args.data, transform=test_transform, train=False),
     batch_size=args.test_batch_size, shuffle=False, **kwargs)
-
-num_classes = 1000
+num_classes = {"CIFAR10": 10, "CIFAR100": 100, "ImageNet": 1000}
+input_size = args.dataset == 'ImageNet' and 224 or 32
 model = DenseNet(num_init_features=args.num_init_features, block_config=args.block_config, compression=args.compression,
-                 input_size=224, bn_size=args.bn_size, num_classes=num_classes, efficient=True)
+                 input_size=input_size, bn_size=args.bn_size, num_classes=num_classes[args.dataset], efficient=True)
 print(model)
 
 if not os.path.isdir(args.checkpoints):
@@ -121,7 +144,7 @@ engine = Engine()
 meter_loss = tnt.meter.AverageValueMeter()
 topk = [1, 5]
 classerr = tnt.meter.ClassErrorMeter(topk=topk, accuracy=False)  # default is also False
-confusion_meter = tnt.meter.ConfusionMeter(num_classes, normalized=True)
+confusion_meter = tnt.meter.ConfusionMeter(num_classes[args.dataset], normalized=True)
 
 if args.visdom:
     if args.log_name == '':
@@ -132,8 +155,8 @@ if args.visdom:
     test_loss_logger = VisdomPlotLogger('line', opts={'title': '[{}] Test Loss'.format(args.log_name)})
     test_err_logger = VisdomPlotLogger('line', opts={'title': '[{}] Test Class Error'.format(args.log_name)})
     confusion_logger = VisdomLogger('heatmap', opts={'title': '[{}] Confusion matrix'.format(args.log_name),
-                                                     'columnnames': list(range(num_classes)),
-                                                     'rownames': list(range(num_classes))})
+                                                     'columnnames': list(range(num_classes[args.dataset])),
+                                                     'rownames': list(range(num_classes[args.dataset]))})
 
 criterion = nn.CrossEntropyLoss()
 
@@ -210,7 +233,8 @@ def on_sample(state):
             group['lr'] = lr
         if state['t'] == state['epoch'] * len(state['iterator']):
             for i, p in enumerate(state['optimizer'].param_groups):
-                print(str(i)+':', p['lr'])
+                print(str(i) + ':', p['lr'])
+
 
 def reset_meters():
     classerr.reset()

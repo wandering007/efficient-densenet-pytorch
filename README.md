@@ -63,7 +63,9 @@ Easy configuration and run:
 2. Configure the experiment settings in `config.yaml`.
 3. run the command like `./run.sh 0,1,2,3 config.yaml `.
 
-You will find that 4 GPUs are totally enough for training the efficient model with batch size of 256! 
+You will find that 4 GPUs are totally enough for training the efficient model with batch size of `256`!
+
+CIFAR training is also provided and easy to configure :-)
 
 # References
 
