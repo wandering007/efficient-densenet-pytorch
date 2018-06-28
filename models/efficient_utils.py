@@ -1,6 +1,6 @@
 # This implementation is a new efficient implementation of Densenet-BC,
 # as described in "Memory-Efficient Implementation of DenseNets"
-# The code is based on https://github.com/gpleiss/efficient_densenet_pytorch
+# The code is modified from https://github.com/gpleiss/efficient_densenet_pytorch/tree/pytorch_0.3.1
 
 import math
 import torch
@@ -135,10 +135,10 @@ class _EfficientDensenetBottleneckFn(Function):
             size[1] += num_channels
         with torch.no_grad():
             bn_input = torch.cat(inputs, dim=1) if len(inputs) > 1 else inputs[0]
-            relu_output = inputs[0].new(self.shared_alloc).resize_(size)
             bn_output = F.batch_norm(bn_input, self.running_mean, self.running_var,
                                      bn_weight, bn_bias, training=self.training,
                                      momentum=self.momentum, eps=self.eps)
+            relu_output = inputs[0].new(self.shared_alloc).resize_(size)
             # Do ReLU - and have the output be in the intermediate storage
             torch.clamp(bn_output, min=0, out=relu_output)
         self.save_for_backward(*inputs)
