@@ -44,7 +44,7 @@ class _EfficientDensenetBottleneck(nn.Module):
         self.register_parameter('conv_weight', nn.Parameter(torch.Tensor(num_output_channels,
                                                                          num_input_channels, *self.kernel_size)))
         if bias:
-            self.register_parameter('conv_bias', nn.Parameter(torch.Tensor(num_input_channels)))
+            self.register_parameter('conv_bias', nn.Parameter(torch.Tensor(num_output_channels)))
         else:
             self.register_parameter('conv_bias', None)
         self._reset_parameters()
