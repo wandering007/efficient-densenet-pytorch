@@ -267,7 +267,7 @@ def on_end_epoch(state):
         saved_model = model.module if len(args.gpus) > 1 else model
         copied_model = copy.deepcopy(saved_model).cpu()
         torch.save(obj={'epoch': state['epoch'] - 1, 'state_dict': copied_model.state_dict()},
-                   f=os.path.join(args.checkpoints, 'ImageNet_{:03d}.tar'.format(state['epoch'] - 1)))
+                   f=os.path.join(args.checkpoints, args.dataset + '_{:03d}.tar'.format(state['epoch'] - 1)))
 
     # do validation at the end of each epoch
     reset_meters()

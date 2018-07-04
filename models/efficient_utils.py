@@ -50,12 +50,17 @@ class _EfficientDensenetBottleneck(nn.Module):
         self._reset_parameters()
 
     def _reset_parameters(self):
-        self._buffers['norm_running_mean'].zero_()
-        self._buffers['norm_running_var'].fill_(1)
-        self._parameters['norm_weight'].data.uniform_()
-        self._parameters['norm_bias'].data.zero_()
+        self.norm_running_mean.zero_()
+        self.norm_running_var.fill_(1)
+        self.norm_weight.data.uniform_()
+        self.norm_bias.data.zero_()
+        n = self.num_input_channels
+        for k in self.kernel_size:
+            n *= k
         stdv = 1. / math.sqrt(self.num_input_channels)
-        self._parameters['conv_weight'].data.uniform_(-stdv, stdv)
+        self.conv_weight.data.uniform_(-stdv, stdv)
+        if self.conv_bias is not None:
+            self.conv_bias.data.uniform_(-stdv, stdv)
 
     def forward(self, inputs, shared_alloc):
         if isinstance(inputs, torch.Tensor):
