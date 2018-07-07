@@ -165,6 +165,6 @@ class DenseNet(nn.Module):
                 x = module(x)
         out = F.relu(x)
         out = F.avg_pool2d(out, kernel_size=out.size(2)).view(out.size(0), -1)
-        out = F.dropout(out, p=0.5, training=self.training)
+        # out = F.dropout(out, p=0.5, training=self.training)
         out = self.classifier(out)
         return out
