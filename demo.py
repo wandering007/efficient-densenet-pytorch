@@ -248,9 +248,10 @@ def on_start_epoch(state):
 
 
 def on_forward(state):
-    nn.utils.clip_grad_norm_(model.parameters(), args.clip)
-    classerr.add(state['output'].data, torch.LongTensor(state['sample'][1]))  # doubt on the LongTensor
-    confusion_meter.add(state['output'].data, torch.LongTensor(state['sample'][1]))
+    if state['sample'][2]:
+        nn.utils.clip_grad_norm_(model.parameters(), args.clip)
+    classerr.add(state['output'].data, state['sample'][1])
+    confusion_meter.add(state['output'].data, state['sample'][1])
     meter_loss.add(state['loss'].item())
 
 
