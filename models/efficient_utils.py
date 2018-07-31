@@ -98,7 +98,7 @@ class _EfficientDensenetBottleneck(nn.Module):
             s += ', dilation={dilation}'
         if self.groups != 1:
             s += ', groups={groups}'
-        if self.bias is None:
+        if not self.bias:
             s += ', bias=False'
         s += '))'
         return s.format(name=self.__class__.__name__, **self.__dict__)
