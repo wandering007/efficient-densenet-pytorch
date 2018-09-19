@@ -8,6 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Function
 from torch.nn.modules.utils import _single, _pair, _triple
+from torch.autograd.function import once_differentiable
 
 
 class _EfficientDensenetBottleneck(nn.Module):
@@ -170,6 +171,7 @@ class _EfficientDensenetBottleneckFn(Function):
         torch.clamp(self.bn_output, min=0, out=relu_output)
         self.relu_output = relu_output
 
+    @once_differentiable
     def backward(self, grad_output):
         """
         Precondition: must call prepare_backward before calling backward
@@ -184,7 +186,7 @@ class _EfficientDensenetBottleneckFn(Function):
 
         # BN weight/bias grad
         # With the shared allocations re-populated, compute ReLU/BN backward
-        relu_grad_input = grad_output.masked_fill_(self.relu_output <= 0, 0)
+        relu_grad_input = grad_output.masked_fill_(self.relu_output <= 0, 0).contiguous()
         self.bn_output.backward(gradient=relu_grad_input)
         if self.needs_input_grad[0]:
             grads[0] = self.bn_weight.grad.data
@@ -197,7 +199,7 @@ class _EfficientDensenetBottleneckFn(Function):
             index = 0
             for i, num_channels in enumerate(all_num_channels):
                 new_index = num_channels + index
-                grads[2 + i] = self.bn_input.grad.data[:, index:new_index]
+                grads[2 + i] = self.bn_input.grad.data[:, index:new_index].contiguous()
                 index = new_index
         # remove intermediate variables
         del self.relu_output
@@ -206,6 +208,8 @@ class _EfficientDensenetBottleneckFn(Function):
         del self.bn_weight
         del self.bn_bias
         del self.shared_alloc
+        del self.running_mean
+        del self.running_var
         return tuple(grads)
 
 
@@ -223,8 +227,9 @@ class _DummyBackwardHookFn(Function):
         self.fn = fn
 
     def forward(self, input):
-        return input
+        return input.data
 
+    @once_differentiable
     def backward(self, grad_output):
         self.fn.prepare_backward()
         return grad_output
