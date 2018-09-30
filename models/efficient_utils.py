@@ -82,8 +82,7 @@ class _EfficientDensenetBottleneck(nn.Module):
 
         # Register a hook to re-populate the storages (relu_output and concat) on backward pass
         # To do this, we need a dummy function
-        dummy_fn = _DummyBackwardHookFn(fn)
-        output = dummy_fn(conv_output)
+        output = _DummyBackwardHookFn.apply(conv_output, fn)
 
         # Return the convolution output
         return output
@@ -220,16 +219,13 @@ class _DummyBackwardHookFn(Function):
     pass on the bottleneck layer
     The function itself is just an identity function
     """
-    def __init__(self, fn):
-        """
-        fn: function to call "prepare_backward" on
-        """
-        self.fn = fn
-
-    def forward(self, input):
+    @staticmethod
+    def forward(ctx, input, fn):
+        ctx.fn = fn
         return input.data
 
+    @staticmethod
     @once_differentiable
-    def backward(self, grad_output):
-        self.fn.prepare_backward()
-        return grad_output
+    def backward(ctx, grad_output):
+        ctx.fn.prepare_backward()
+        return grad_output, None
