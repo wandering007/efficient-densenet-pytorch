@@ -1,6 +1,6 @@
 # efficient-densenet-pytorch
 
-Memory-Efficient Implementation of DenseNets, **support both DenseNet and DeseNet-BC series.**
+Memory-Efficient Implementation of DenseNets, supporting both **DenseNet and DeseNet-BC series**.
 
 Environments: Linux CPU/GPU, Python 3, PyTorch 1.0
 

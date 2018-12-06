@@ -163,8 +163,8 @@ class DenseNet(nn.Module):
                 x = module(x, shared_alloc)
             else:
                 x = module(x)
-        out = F.relu(x)
-        out = F.avg_pool2d(out, kernel_size=out.size(2)).view(out.size(0), -1)
-        # out = F.dropout(out, p=0.5, training=self.training)
-        out = self.classifier(out)
+        x = F.relu(x)
+        x = F.adaptive_avg_pool2d(x, output_size=1).view(x.size(0), -1)
+        # x = F.dropout(x, p=0.5, training=self.training)
+        out = self.classifier(x)
         return out
