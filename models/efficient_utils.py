@@ -1,7 +1,8 @@
 # This implementation is a new efficient implementation of Densenet-BC,
 # as described in "Memory-Efficient Implementation of DenseNets"
 # The code is modified from https://github.com/gpleiss/efficient_densenet_pytorch/tree/pytorch_0.3.1
-
+from functools import reduce
+from operator import mul
 import math
 import torch
 import torch.nn as nn
@@ -11,7 +12,7 @@ from torch.nn.modules.utils import _single, _pair, _triple
 from torch.autograd.function import once_differentiable
 
 
-class _EfficientDensenetBottleneck(nn.Module):
+class EfficientDensenetBottleneck(nn.Module):
     """
     A optimized layer which encapsulates the batch normalization, ReLU, and
     convolution operations within the bottleneck of a DenseNet layer.
@@ -20,10 +21,11 @@ class _EfficientDensenetBottleneck(nn.Module):
     concatenation and batch normalization features. Because the shared memory
     is not perminant, these features are recomputed during the backward pass.
     """
+
     def __init__(self, num_input_channels, num_output_channels,
                  kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=True, dims=2,
                  momentum=0.1, eps=1e-5):
-        super(_EfficientDensenetBottleneck, self).__init__()
+        super(EfficientDensenetBottleneck, self).__init__()
         assert dims in [1, 2, 3]
         self.num_input_channels = num_input_channels
         self.num_output_channels = num_output_channels
@@ -42,6 +44,7 @@ class _EfficientDensenetBottleneck(nn.Module):
         self.register_parameter('norm_bias', nn.Parameter(torch.Tensor(num_input_channels)))
         self.register_buffer('norm_running_mean', torch.zeros(num_input_channels))
         self.register_buffer('norm_running_var', torch.ones(num_input_channels))
+        self.register_buffer('norm_num_batches_tracked', torch.tensor(0, dtype=torch.long))
         self.register_parameter('conv_weight', nn.Parameter(torch.Tensor(num_output_channels,
                                                                          num_input_channels, *self.kernel_size)))
         if bias:
@@ -53,6 +56,7 @@ class _EfficientDensenetBottleneck(nn.Module):
     def _reset_parameters(self):
         self.norm_running_mean.zero_()
         self.norm_running_var.fill_(1)
+        self.norm_num_batches_tracked.zero_()
         self.norm_weight.data.uniform_()
         self.norm_bias.data.zero_()
         n = self.num_input_channels
@@ -66,14 +70,23 @@ class _EfficientDensenetBottleneck(nn.Module):
     def forward(self, inputs, shared_alloc):
         if isinstance(inputs, torch.Tensor):
             inputs = [inputs]
-
+        if inputs[0].dim() != self.dims + 2:
+            raise ValueError('expected {}D input (got {}D input)'
+                             .format(self.dims + 2, inputs[0].dim()))
+        exponential_average_factor = 0.0
+        if self.training:
+            self.norm_num_batches_tracked += 1
+            if self.momentum is None:  # use cumulative moving average
+                exponential_average_factor = 1.0 / self.norm_num_batches_tracked.item()
+            else:  # use exponential moving average
+                exponential_average_factor = self.momentum
         # The EfficientDensenetBottleneckFn performs the concatenation, batch norm, and ReLU.
         # It does not create any new storage
         # Rather, it uses a shared memory allocation to store the intermediate feature maps
         # These intermediate feature maps have to be re-populated before the backward pass
         fn = _EfficientDensenetBottleneckFn(shared_alloc,
                                             self._buffers['norm_running_mean'], self._buffers['norm_running_var'],
-                                            training=self.training, momentum=self.momentum, eps=self.eps)
+                                            training=self.training, momentum=exponential_average_factor, eps=self.eps)
         relu_output = fn(self._parameters['norm_weight'], self._parameters['norm_bias'], *inputs)
 
         # The convolutional output - using relu_output which is stored in shared memory allocation
@@ -82,7 +95,7 @@ class _EfficientDensenetBottleneck(nn.Module):
 
         # Register a hook to re-populate the storages (relu_output and concat) on backward pass
         # To do this, we need a dummy function
-        output = _DummyBackwardHookFn.apply(conv_output, fn)
+        output = _DummyBackwardHook.apply(conv_output, fn)
 
         # Return the convolution output
         return output
@@ -119,6 +132,7 @@ class _EfficientDensenetBottleneckFn(Function):
     If the output is not used IMMEDIATELY after calling forward, it is not guarenteed
     to be the ReLU output
     """
+
     def __init__(self, shared_alloc,
                  running_mean, running_var,
                  training=True, momentum=0.1, eps=1e-5):
@@ -143,6 +157,7 @@ class _EfficientDensenetBottleneckFn(Function):
             bn_output = F.batch_norm(bn_input, self.running_mean, self.running_var,
                                      bn_weight, bn_bias, training=self.training,
                                      momentum=self.momentum, eps=self.eps)
+            assert self.shared_alloc.size() >= reduce(mul, size, 1)
             relu_output = inputs[0].new(self.shared_alloc).resize_(size)
             # Do ReLU - and have the output be in the intermediate storage
             torch.clamp(bn_output, min=0, out=relu_output)
@@ -164,7 +179,7 @@ class _EfficientDensenetBottleneckFn(Function):
             self.bn_output = F.batch_norm(self.bn_input, self.running_mean, self.running_var,
                                           self.bn_weight, self.bn_bias, training=self.training,
                                           momentum=0, eps=self.eps)
-
+        assert self.shared_alloc.size() >= reduce(mul, size, 1)
         # Do ReLU
         relu_output = inputs[0].new(self.shared_alloc).resize_(size)
         torch.clamp(self.bn_output, min=0, out=relu_output)
@@ -212,13 +227,14 @@ class _EfficientDensenetBottleneckFn(Function):
         return tuple(grads)
 
 
-class _DummyBackwardHookFn(Function):
+class _DummyBackwardHook(Function):
     """
     A dummy function, which is just designed to run a backward hook
     This allows us to re-populate the shared storages before running the backward
     pass on the bottleneck layer
     The function itself is just an identity function
     """
+
     @staticmethod
     def forward(ctx, input, fn):
         ctx.fn = fn
@@ -228,4 +244,4 @@ class _DummyBackwardHookFn(Function):
     @once_differentiable
     def backward(ctx, grad_output):
         ctx.fn.prepare_backward()
-        return grad_output, None
+        return grad_output.data, None

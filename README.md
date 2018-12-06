@@ -2,7 +2,7 @@
 
 Memory-Efficient Implementation of DenseNets, **support both DenseNet and DeseNet-BC series.**
 
-Environments: Linux CPU/GPU, Python 3, PyTorch 0.4 or higher
+Environments: Linux CPU/GPU, Python 3, PyTorch 1.0
 
 Check the implementation correctness by `python -m utils.gradient_checking.py` with different settings in `utils/gradient_checking.py` (CPU, single GPU, multiple GPUs), some `assert` errors may be caused by occasional random states, you can relax the error tolerance (default: `1e-5`) or try it several times.
 
