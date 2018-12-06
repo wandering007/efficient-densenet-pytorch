@@ -198,7 +198,7 @@ class _EfficientDensenetBottleneckFn(Function):
 
         # BN weight/bias grad
         # With the shared allocations re-populated, compute ReLU/BN backward
-        relu_grad_input = grad_output.masked_fill_(self.relu_output <= 0, 0).contiguous()
+        relu_grad_input = grad_output.masked_fill_(self.relu_output <= 0, 0)
         self.bn_output.backward(gradient=relu_grad_input)
         if self.needs_input_grad[0]:
             grads[0] = self.bn_weight.grad.data
@@ -211,7 +211,7 @@ class _EfficientDensenetBottleneckFn(Function):
             index = 0
             for i, num_channels in enumerate(all_num_channels):
                 new_index = num_channels + index
-                grads[2 + i] = self.bn_input.grad.data[:, index:new_index].contiguous()
+                grads[2 + i] = self.bn_input.grad.data[:, index:new_index]
                 index = new_index
         # remove intermediate variables
         del self.relu_output
