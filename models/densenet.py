@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from .efficient_utils import _EfficientDensenetBottleneck
+from .efficient_utils import EfficientDensenetBottleneck
 from functools import reduce
 from operator import mul
 
@@ -11,7 +11,7 @@ class _DenseLayer(nn.Module):
         super(_DenseLayer, self).__init__()
         if bn_size:
             if efficient:
-                self.add_module('bottleneck', _EfficientDensenetBottleneck(
+                self.add_module('bottleneck', EfficientDensenetBottleneck(
                     num_input_channels=num_input_features,
                     num_output_channels=bn_size * growth_rate,
                     kernel_size=1, bias=False))
@@ -26,7 +26,7 @@ class _DenseLayer(nn.Module):
                                                kernel_size=3, stride=1, padding=1, bias=False))
         else:
             if efficient:
-                self.add_module('bottleneck', _EfficientDensenetBottleneck(
+                self.add_module('bottleneck', EfficientDensenetBottleneck(
                     num_input_channels=num_input_features,
                     num_output_channels=growth_rate,
                     kernel_size=3, stride=1, padding=1, bias=False))
@@ -151,7 +151,7 @@ class DenseNet(nn.Module):
                 nn.init.constant_(m.bias, 0)
             elif isinstance(m, nn.Linear):
                 nn.init.constant_(m.bias, 0)
-            elif isinstance(m, _EfficientDensenetBottleneck):
+            elif isinstance(m, EfficientDensenetBottleneck):
                 nn.init.constant_(m._parameters['norm_weight'], 1)
                 nn.init.constant_(m._parameters['norm_bias'], 0)
                 nn.init.kaiming_normal_(m._parameters['conv_weight'], mode='fan_out', nonlinearity='relu')

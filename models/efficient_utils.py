@@ -1,6 +1,6 @@
 # This implementation is a new efficient implementation of Densenet-BC,
-# as described in "Memory-Efficient Implementation of DenseNets"
-# The code is modified from https://github.com/gpleiss/efficient_densenet_pytorch/tree/pytorch_0.3.1
+# as described in "Memory-Efficient Implementation of DenseNets",
+# an improved code implementation of https://github.com/gpleiss/efficient_densenet_pytorch/tree/pytorch_0.3.1
 from functools import reduce
 from operator import mul
 import math
@@ -9,7 +9,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Function
 from torch.nn.modules.utils import _single, _pair, _triple
-from torch.autograd.function import once_differentiable
 
 
 class EfficientDensenetBottleneck(nn.Module):
@@ -185,7 +184,6 @@ class _EfficientDensenetBottleneckFn(Function):
         torch.clamp(self.bn_output, min=0, out=relu_output)
         self.relu_output = relu_output
 
-    @once_differentiable
     def backward(self, grad_output):
         """
         Precondition: must call prepare_backward before calling backward
@@ -218,12 +216,8 @@ class _EfficientDensenetBottleneckFn(Function):
         # remove intermediate variables
         del self.relu_output
         del self.bn_output
-        del self.bn_input
         del self.bn_weight
         del self.bn_bias
-        del self.shared_alloc
-        del self.running_mean
-        del self.running_var
         return tuple(grads)
 
 
@@ -241,7 +235,6 @@ class _DummyBackwardHook(Function):
         return input.data
 
     @staticmethod
-    @once_differentiable
     def backward(ctx, grad_output):
         ctx.fn.prepare_backward()
         return grad_output.data, None
