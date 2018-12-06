@@ -216,6 +216,7 @@ class _EfficientDensenetBottleneckFn(Function):
         # remove intermediate variables
         del self.relu_output
         del self.bn_output
+        del self.bn_input
         del self.bn_weight
         del self.bn_bias
         return tuple(grads)
