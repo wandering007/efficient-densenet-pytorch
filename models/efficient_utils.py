@@ -1,6 +1,6 @@
 # This implementation is a new efficient implementation of Densenet-BC,
 # as described in "Memory-Efficient Implementation of DenseNets",
-# an improved code implementation of https://github.com/gpleiss/efficient_densenet_pytorch/tree/pytorch_0.3.1
+# an upgrade version of https://github.com/gpleiss/efficient_densenet_pytorch/tree/pytorch_0.3.1
 from functools import reduce
 from operator import mul
 import math
@@ -172,6 +172,7 @@ class _EfficientDensenetBottleneckFn(Function):
         for num_channels in all_num_channels[1:]:
             size[1] += num_channels
         bn_input = torch.cat(inputs, dim=1) if len(inputs) > 1 else inputs[0].detach()
+        # make bn_input requires_grad == True, must detach it from inputs first 
         self.bn_input = bn_input.requires_grad_()
         with torch.enable_grad():
             # Do batch norm
@@ -180,9 +181,8 @@ class _EfficientDensenetBottleneckFn(Function):
                                           momentum=0, eps=self.eps)
         assert self.shared_alloc.size() >= reduce(mul, size, 1)
         # Do ReLU
-        relu_output = inputs[0].new(self.shared_alloc).resize_(size)
-        torch.clamp(self.bn_output, min=0, out=relu_output)
-        self.relu_output = relu_output
+        self.relu_output = inputs[0].new(self.shared_alloc).resize_(size)
+        torch.clamp(self.bn_output, min=0, out=self.relu_output)
 
     def backward(self, grad_output):
         """
@@ -217,8 +217,7 @@ class _EfficientDensenetBottleneckFn(Function):
         del self.relu_output
         del self.bn_output
         del self.bn_input
-        del self.bn_weight
-        del self.bn_bias
+
         return tuple(grads)
 
 

@@ -15,8 +15,8 @@ num_init_features=24, block_config=(12, 12, 12), compression=1, input_size=32, b
 
 |     Model     |           CPU           |          1 GPU          |         2 GPUs         |         4 GPUs         |
 | :-----------: | :---------------------: | :---------------------: | :--------------------: | :--------------------: |
-|   Efficient   | F=15849, B=36738, R=2.3 | F=36.3, B=103.8, R=2.86 | F=43.2, B=66.9, R=1.55 | F=69.6, B=81.7, R=1.17 |
-| Non-efficient | F=24889, B=36732, R=1.5 | F=36.1, B=74.9, R=2.07  | F=37.9, B=40.7, R=1.07 | F=62.0, B=33.1, R=0.53 |
+|   Efficient   | F=15849, B=36738, R=2.3 | F=38.0, B=103.5, R=2.72 | F=38.5, B=64.0, R=1.66 | F=63.3, B=77.5, R=1.23 |
+| Non-efficient | F=24889, B=36732, R=1.5 | F=38.0, B=77.9, R=2.05  | F=36.2, B=42.1, R=1.16 | F=56.2, B=31.8, R=0.57 |
 
 *F means average forward time (ms), B means average backward time (ms), R=B/F.*
 
