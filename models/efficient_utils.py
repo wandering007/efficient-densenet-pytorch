@@ -174,6 +174,14 @@ class _EfficientDensenetBottleneckFn(Function):
         bn_input = torch.cat(inputs, dim=1) if len(inputs) > 1 else inputs[0].detach()
         # make bn_input requires_grad == True, must detach it from inputs first 
         self.bn_input = bn_input.requires_grad_()
+        
+        if self.bn_weight.grad is not None:
+            self.bn_weight.grad.detach_()
+            self.bn_weight.grad.zero_()
+        if self.bn_bias.grad is not None:
+            self.bn_bias.grad.detach_()
+            self.bn_bias.grad.zero_()
+
         with torch.enable_grad():
             # Do batch norm
             self.bn_output = F.batch_norm(self.bn_input, self.running_mean, self.running_var,
