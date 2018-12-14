@@ -161,8 +161,8 @@ class _EfficientDensenetBottleneckFn(Function):
             # Do ReLU - and have the output be in the intermediate storage
             torch.clamp(bn_output, min=0, out=relu_output)
         self.save_for_backward(*inputs)
-        self.bn_weight = bn_weight.detach().requires_grad_()
-        self.bn_bias = bn_bias.detach().requires_grad_()
+        self.bn_weight = bn_weight
+        self.bn_bias = bn_bias
         return relu_output
 
     def prepare_backward(self):
@@ -174,14 +174,8 @@ class _EfficientDensenetBottleneckFn(Function):
         bn_input = torch.cat(inputs, dim=1) if len(inputs) > 1 else inputs[0].detach()
         # make bn_input requires_grad == True, must detach it from inputs first 
         self.bn_input = bn_input.requires_grad_()
-        
-        if self.bn_weight.grad is not None:
-            self.bn_weight.grad.detach_()
-            self.bn_weight.grad.zero_()
-        if self.bn_bias.grad is not None:
-            self.bn_bias.grad.detach_()
-            self.bn_bias.grad.zero_()
-
+        self.bn_weight = self.bn_weight.detach().requires_grad_()
+        self.bn_bias = self.bn_bias.detach().requires_grad_()
         with torch.enable_grad():
             # Do batch norm
             self.bn_output = F.batch_norm(self.bn_input, self.running_mean, self.running_var,
